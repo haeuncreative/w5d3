@@ -42,7 +42,7 @@ CREATE TABLE replies (
 
     FOREIGN KEY (parent_reply_id) REFERENCES replies(id)
     FOREIGN KEY (question_id) REFERENCES questions(id)
-    FOREIGN KEY (author_id) REFERENCES user(id)
+    FOREIGN KEY (author_id) REFERENCES users(id)
 );
 
 DROP TABLE IF EXISTS question_likes;
@@ -53,7 +53,7 @@ CREATE TABLE question_likes (
     users_id INTEGER,
 
     FOREIGN KEY (question_id) REFERENCES questions(id)
-    FOREIGN KEY (users_id) REFERENCES user(id)
+    FOREIGN KEY (users_id) REFERENCES users(id)
 );
 
 INSERT INTO 
