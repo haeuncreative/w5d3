@@ -12,13 +12,25 @@ class QuestionsDBConnection < SQLite3::Database
 end
 
 class User
-    attr_accessor :id, :fname, :lname
+    attr_accessor :id, :fname, :lname, :author_id
 
     def self.all
         data = QuestionsDBConnection.instance.execute("SELECT * FROM users")
         data.map { |datum| User.new(datum) }
     end
 
+    def self.find_by_name(fname, lname)
+        user = QuestionsDBConnection.instance.execute(<<-SQL, fname, lname)
+            SELECT 
+                *
+            FROM
+                users
+            WHERE
+                fname = ? AND lname = ?
+        SQL
+        return nil unless user.length > 0
+        User.new(user[0])
+    end
 
     def self.find_by_id(id)
         user = QuestionsDBConnection.instance.execute(<<-SQL, id)
@@ -37,6 +49,14 @@ class User
         @id = options['id']
         @fname = options['fname']
         @lname = options['lname']
+    end
+
+    def authored_questions
+        authored_questions_arr = [Question.find_by_author_id(self.id)]
+    end
+
+    def authored_replies
+        authored_replies_arr = [Reply.find_by_author_id(self.id)]
     end
 
 end
@@ -82,6 +102,17 @@ class Question
         @title = options['title']
         @body = options['body']
         @author_id = options['author_id']
+    end
+
+    def author
+        QuestionsDBConnection.instance.execute(<<-SQL, author_id)
+        SELECT
+            *
+        FROM
+            users
+        WHERE
+           id = ?
+        SQL
     end
 
 end
@@ -133,6 +164,19 @@ class Reply
                 replies
             WHERE
                 id = ?
+            SQL
+        return nil unless reply.length > 0
+        Reply.new(reply[0])
+    end
+
+    def self.find_by_question_id(question_id)
+        reply = QuestionsDBConnection.instance.execute(<<-SQL, question_id)
+            SELECT
+                *
+            FROM
+                replies
+            WHERE
+                question_id = ?
             SQL
         return nil unless reply.length > 0
         Reply.new(reply[0])
