@@ -10,7 +10,7 @@ class QuestionsDBConnection < SQLite3::Database
     self.results_as_hash = true
   end
 end
-
+#---------------------------------------------------------------------------------------------
 class User
     attr_accessor :id, :fname, :lname, :author_id
 
@@ -59,8 +59,13 @@ class User
         authored_replies_arr = [Reply.find_by_author_id(self.id)]
     end
 
-end
+    def followed_questions
+        follower_id = @id
+        QuestionFollow.followed_questions_for_user_id(follower_id)
+    end
 
+end
+#---------------------------------------------------------------------------------------------
 class Question 
     attr_accessor :id, :title, :body, :author_id
 
@@ -97,6 +102,10 @@ class Question
         Question.new(question[0])
     end
 
+    def self.most_followed(n)
+        QuestionFollow.most_followed_questions(n)
+    end
+
     def initialize(options)
         @id = options['id']
         @title = options['title']
@@ -115,8 +124,29 @@ class Question
         SQL
     end
 
-end
+    def replies
+        # Reply.find_by_author_id(author_id)
+        question_id = @id 
+        replies = QuestionsDBConnection.instance.execute(<<-SQL, question_id)
+        SELECT
+            reply_body
+        FROM
+            replies
+        WHERE
+           question_id = ?
+        SQL
 
+        replies.map {|reply| Reply.new(reply)}
+    end
+
+    def followers
+        question_id = @id
+        QuestionFollow.followers_for_question_id(question_id)
+    end
+
+
+end
+#---------------------------------------------------------------------------------------------
 class QuestionFollow
     attr_accessor :id, :follower_id, :question_id
 
@@ -138,6 +168,49 @@ class QuestionFollow
         QuestionFollow.new(question_follow[0])
     end
 
+    def self.followers_for_question_id(question_id)
+        question_follow = QuestionsDBConnection.instance.execute(<<-SQL, question_id)
+            SELECT
+                fname, lname
+            FROM
+                users
+            JOIN question_follows
+                ON users.id = question_follows.follower_id 
+            WHERE
+                question_id = ?
+            SQL
+    end
+
+    def self.followed_questions_for_user_id(follower_id)
+        question_follow = QuestionsDBConnection.instance.execute(<<-SQL, follower_id)
+            SELECT
+                title, body
+            FROM
+                questions
+            JOIN question_follows
+                ON questions.id = question_follows.question_id
+
+            WHERE
+                follower_id = ?
+            SQL
+    end
+
+    def self.most_followed_questions(n)
+        most_followed = QuestionsDBConnection.instance.execute(<<-SQL, n)
+            SELECT
+                title, COUNT(follower_id)
+            FROM 
+                question_follows
+            JOIN 
+                users ON users.id = question_follows.follower_id 
+            JOIN 
+                questions ON questions.id = question_follows.question_id
+                ORDER BY follower_id 
+                LIMIT ?
+        SQL
+    end
+
+    
 
     def initialize(options)
         @id = options['id']
@@ -147,7 +220,7 @@ class QuestionFollow
 
 
 end
-
+#---------------------------------------------------------------------------------------------
 class Reply
     attr_accessor :id, :parent_reply_id, :question_id, :author_id, :reply_body
 
@@ -192,9 +265,7 @@ class Reply
         WHERE
             author_id = ?
         SQL
-    
         return nil unless reply.length > 0
-
         Reply.new(reply[0])
     end    
 
@@ -207,8 +278,71 @@ class Reply
         @reply_body = options['reply_body']
     end
 
+    def author
+        QuestionsDBConnection.instance.execute(<<-SQL, id)
+        SELECT
+            fname , lname
+        FROM
+            users
+        WHERE
+           id = ?
+        SQL
+    end
+
+    def question 
+        question = QuestionsDBConnection.instance.execute(<<-SQL, id)
+        SELECT
+            title, body
+        FROM
+            questions
+        WHERE
+           id = ?
+        SQL
+        return nil unless question.length > 0
+        question.map { |ques| Question.new(ques) }
+    end
+
+    def parent_reply
+        Reply.find_by_id(parent_reply_id)
+        # parent_reply = QuestionsDBConnection.instance.execute(<<-SQL, parent_reply_id)
+        # SELECT
+        #     id
+        # FROM
+        #     replies
+        # WHERE
+        #    id = ? --does this need to be id only (along time the parameter above?)
+        # SQL
+        # # return nil unless parent_reply.length > 0
+        # parent_reply[0]
+    end
+
+    def child_replies
+        child_replies = QuestionsDBConnection.instance.execute(<<-SQL, parent_reply_id)
+        SELECT
+            reply_body 
+        FROM
+            replies
+        WHERE 
+           parent_reply_id = ? 
+        SQL
+        return nil unless child_replies.length > 0
+        child_replies.map { |reply| Reply.new(reply).reply_body }
+        # return 'no child replies :(' if @author_id == nil
+
+    end
+
 
 end
+
+
+
+
+#---------------------------------------------------------------------------------------------
+
+
+
+
+
 
 class QuestionLike
     attr_accessor :id, :question_id, :users_id
@@ -231,6 +365,32 @@ class QuestionLike
         QuestionLike.new(question_like[0])
     end
 
+    def self.likers_for_question_id(question_id)
+        likers = QuestionsDBConnection.instance.execute(<<-SQL, question_id)
+            SELECT
+                fname, lname
+            FROM
+                users
+            JOIN
+                question_likes ON users.id = question_likes.users_id
+            WHERE
+                question_id = ?
+        SQL
+    end
+
+    def self.num_likes_for_question_id(question_id)
+        likers = QuestionsDBConnection.instance.execute(<<-SQL, question_id)
+        SELECT
+            COUNT(fname)
+        FROM
+            users
+        JOIN
+            question_likes ON users.id = question_likes.users_id
+        WHERE
+            question_id = ?
+        SQL
+        
+    end
 
     def initialize(options)
         @id = options['id']
@@ -240,3 +400,7 @@ class QuestionLike
 
 
 end
+
+#---------------------------------------------------------------------------------------------
+
+
